@@ -89,7 +89,7 @@ async function visitCollection(col) {
   }
 
   collections[col.path] = entries;
-  console.log("Colección procesada:", col.path, "| documentos:", entries.filter(row => row.exists).length);
+  // Evitar publicar nombres de colecciones en los registros del repositorio público.
 
   await workPool(docRefs, async (ref) => {
     const children = await ref.listCollections();
