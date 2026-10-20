@@ -23,6 +23,9 @@ button{border:0;font-weight:700;cursor:pointer}
 button:disabled{opacity:.5;cursor:not-allowed}
 #status{margin-top:12px;padding:10px 11px;border-radius:9px;background:#f8fafc;font-size:12px;color:#475569;min-height:36px;line-height:1.4}
 .hint{font-size:11px;color:#64748b;margin:0 0 10px}
+.admin{margin:14px 0 0;padding:12px;border:1px solid #cbd5e1;border-radius:9px;background:#f8fafc}
+.admin a{display:block;border-radius:8px;background:#e0e7ff;color:#1e40af;padding:12px;text-decoration:none;text-align:center;font-size:13px;font-weight:700}
+.admin p{margin:8px 0 0;font-size:12px;color:#475569}
 @media(max-width:460px){.row{grid-template-columns:1fr}main{margin:28px auto}}
 </style>
 </head>
@@ -53,6 +56,11 @@ button:disabled{opacity:.5;cursor:not-allowed}
       <button id="xls" class="xls" disabled>Descargar Excel</button>
     </div>
     <div id="status">Selecciona una base.</div>
+    <div class="admin" id="adminWrap" hidden>
+      <label>Respaldo administrativo completo</label>
+      <a href="https://github.com/jeffer91/base-scan/actions/workflows/firestore-backup.yml" target="_blank" rel="noopener noreferrer">Abrir respaldo completo de Firestore ↗</a>
+      <p>Descubre todas las colecciones y subcolecciones con permisos de administrador. Requiere configurar credenciales como secretos de GitHub y genera una copia cifrada.</p>
+    </div>
   </div>
 </main>
 
@@ -66,7 +74,7 @@ const sources={
   titulos:{provider:"Firebase",label:"Títulos",type:"firestore",projectId:"titulos-ec2fa",firebaseConfig:{apiKey:"AIzaSyDkSOhJ552LwxQtt8GhP5iDJk49y0t4mOg",authDomain:"titulos-ec2fa.firebaseapp.com",projectId:"titulos-ec2fa",storageBucket:"titulos-ec2fa.firebasestorage.app",messagingSenderId:"14269419714",appId:"1:14269419714:web:79df03c4df888c61edab5b",measurementId:"G-4MC529QMW9"},collections:["admin_vista_periodos","carreras","configuracion","coordinadores","envios"],state:"Conectado"},
   utet:{provider:"Firebase",label:"UTET",type:"firestore",projectId:"utet-4387a",firebaseConfig:{projectId:"utet-4387a"},collections:["Estudiante","carreras","historial","importaciones","matriculas","periodos","requisitos"],state:"Conectado"},
   repaso:{provider:"Firebase",label:"Repaso-Fire",type:"realtime",projectId:"repaso-fire-d8ceb",firebaseConfig:{projectId:"repaso-fire-d8ceb",databaseURL:"https://repaso-fire-d8ceb-default-rtdb.firebaseio.com"},state:"Conectado"},
-  curriculo:{provider:"Firebase",label:"Currículo",type:"firestore",projectId:"curriculo-ddfcd",firebaseConfig:{apiKey:"AIzaSyB56KzqQmNesXuoQLgLEMrK9H-NOwuqEh8",authDomain:"curriculo-ddfcd.firebaseapp.com",projectId:"curriculo-ddfcd",storageBucket:"curriculo-ddfcd.firebasestorage.app",messagingSenderId:"895337192000",appId:"1:895337192000:web:20e456628871ce83679da5"},collections:[],state:"Conectado"},
+  curriculo:{provider:"Firebase",label:"Currículo",type:"firestore",projectId:"curriculo-ddfcd",firebaseConfig:{apiKey:"AIzaSyB56KzqQmNesXuoQLgLEMrK9H-NOwuqEh8",authDomain:"curriculo-ddfcd.firebaseapp.com",projectId:"curriculo-ddfcd",storageBucket:"curriculo-ddfcd.firebasestorage.app",messagingSenderId:"895337192000",appId:"1:895337192000:web:20e456628871ce83679da5"},collections:["carreras","materias","pea_base","pea_unidades","pea_actividades","cargas","materias_pendientes","materia_versiones","materia_cambios","comunicados","configuracion","mallas_curriculares","malla_materias","malla_requisitos","malla_equivalencias","malla_comparaciones","ficha_inputs","ficha_contextos","ficha_tendencias","ficha_generaciones","ficha_periodos"],state:"Configurado"},
 
   sb_anexos:{provider:"Supabase",label:"anexosreportes",type:"supabase",projectId:"tlzqvbpfaauovnltnpqs",url:"https://tlzqvbpfaauovnltnpqs.supabase.co",publishableKey:"sb_publishable_CkdMqskG7ZYWnNg-pJbRxg_LwN61t6i",tables:[],state:"Pausado · Free"},
   sb_comprobantes:{provider:"Supabase",label:"incorporaciones-comprobantes",type:"supabase",projectId:"exxbbfgbqjuybqepowbd",url:"https://exxbbfgbqjuybqepowbd.supabase.co",publishableKey:"sb_publishable_zI5mpRIWcP_ejz_n7ocaIg_r9zv4PKk",tables:[],state:"Pausado · Free"},
@@ -85,7 +93,7 @@ for(const [key,cfg] of Object.entries(sources)){
   if(cfg.provider==="Firebase") apps[key]=initializeApp(cfg.firebaseConfig,key);
 }
 
-const providerSelect=document.getElementById("provider"),select=document.getElementById("base"),status=document.getElementById("status"),meta=document.getElementById("meta"),extra=document.getElementById("extra"),extraWrap=document.getElementById("extraWrap"),txtBtn=document.getElementById("txt"),xlsBtn=document.getElementById("xls");
+const providerSelect=document.getElementById("provider"),select=document.getElementById("base"),status=document.getElementById("status"),meta=document.getElementById("meta"),extra=document.getElementById("extra"),extraWrap=document.getElementById("extraWrap"),adminWrap=document.getElementById("adminWrap"),txtBtn=document.getElementById("txt"),xlsBtn=document.getElementById("xls");
 
 function fillBases(){
   select.innerHTML='<option value="" selected disabled>Selecciona una base…</option>';
@@ -106,6 +114,7 @@ function setMeta(){
   if(!c){
     meta.innerHTML="";
     extraWrap.hidden=true;
+    adminWrap.hidden=true;
     txtBtn.disabled=true;
     xlsBtn.disabled=true;
     status.textContent="Selecciona la base de datos que quieres usar.";
@@ -113,11 +122,13 @@ function setMeta(){
   }
   meta.innerHTML=`<span class="pill">${c.provider}</span><span class="pill ${c.state.includes("Conectado")||c.state.includes("activa")?"ok":"wait"}">${c.state}</span><span class="pill">${c.projectId}</span>`;
   extraWrap.hidden=c.type!=="firestore";
+  adminWrap.hidden=c.type!=="firestore";
   txtBtn.disabled=false;
   xlsBtn.disabled=false;
   if(c.provider==="Supabase"&&c.state.includes("Pausado")) status.textContent="Proyecto registrado. Está pausado para mantener el plan gratuito; reactívalo en Supabase cuando necesites leerlo.";
   else if(c.provider==="Neon") status.textContent="Proyecto, rama, base y tablas verificados. El acceso web requiere Data API + autenticación; no se exponen credenciales Postgres.";
-  else status.textContent="Conexión lista. Puedes descargar el respaldo permitido por las reglas de la base.";
+  else if(c.type==="firestore") status.textContent="Descarga web: "+(c.collections||[]).length+" colecciones conocidas, más las que añadas, sujetas a las reglas de acceso. Para obtener todas, usa el respaldo administrativo completo.";
+  else status.textContent="Configuración cargada. La descarga dependerá de los permisos de acceso.";
 }
 providerSelect.addEventListener("change",fillBases);
 select.addEventListener("change",setMeta); setMeta();
@@ -166,7 +177,8 @@ async function exportBase(format){
     const data=await readBase(key),name=(cfg.projectId||cfg.database||key)+"_"+stamp();
     if(format==="txt")saveBlob("\ufeff"+JSON.stringify(data,null,2),name+".txt","text/plain;charset=utf-8");
     else{const wb=XLSX.utils.book_new();if(data&&typeof data==="object"&&!Array.isArray(data)){for(const [sheet,value] of Object.entries(data)){const r=rows(value);XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(r.length?r:[{sin_datos:""}]),sheet.slice(0,31))}}if(!wb.SheetNames.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([{sin_datos:""}]),"datos");XLSX.writeFile(wb,name+".xlsx")}
-    status.textContent="Descarga lista.";
+    const failed=(data&&typeof data==="object"&&data._errores)?Object.keys(data._errores):[];
+    status.textContent=failed.length?"Descarga PARCIAL: no se pudieron leer "+failed.length+" colecciones ("+failed.join(", ")+"). Revisa _errores en el archivo.":"Descarga lista. El respaldo web incluye las colecciones configuradas, no las desconocidas ni las subcolecciones sin enumerar.";
   }catch(e){status.textContent="No se pudo leer la base: "+(e?.message||String(e))}
   finally{txtBtn.disabled=false;xlsBtn.disabled=false}
 }
