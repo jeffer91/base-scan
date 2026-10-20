@@ -1,0 +1,83 @@
+name: Respaldo completo Firestore cifrado
+
+on:
+  workflow_dispatch:
+    inputs:
+      proyecto:
+        description: Proyecto Firebase para exportar (colecciones y subcolecciones)
+        required: true
+        type: choice
+        options:
+          - curriculo
+          - titulos
+          - utet
+
+permissions:
+  contents: read
+
+jobs:
+  respaldo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Obtener código
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar SDK de administración
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund firebase-admin@13
+
+      - name: Exportar y cifrar el respaldo
+        env:
+          PROJECT: ${{ inputs.proyecto }}
+          FIREBASE_ADMIN_CURRICULO: ${{ secrets.FIREBASE_ADMIN_CURRICULO }}
+          FIREBASE_ADMIN_TITULOS: ${{ secrets.FIREBASE_ADMIN_TITULOS }}
+          FIREBASE_ADMIN_UTET: ${{ secrets.FIREBASE_ADMIN_UTET }}
+          RESPALDO_CLAVE: ${{ secrets.RESPALDO_CLAVE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$PROJECT" in
+            curriculo)
+              export FIREBASE_EXPECTED_PROJECT="curriculo-ddfcd"
+              export FIREBASE_ADMIN_JSON="$FIREBASE_ADMIN_CURRICULO"
+              ;;
+            titulos)
+              export FIREBASE_EXPECTED_PROJECT="titulos-ec2fa"
+              export FIREBASE_ADMIN_JSON="$FIREBASE_ADMIN_TITULOS"
+              ;;
+            utet)
+              export FIREBASE_EXPECTED_PROJECT="utet-4387a"
+              export FIREBASE_ADMIN_JSON="$FIREBASE_ADMIN_UTET"
+              ;;
+            *)
+              echo "Proyecto no permitido."
+              exit 1
+              ;;
+          esac
+          if [ -z "$FIREBASE_ADMIN_JSON" ]; then
+            echo "Falta configurar el secreto FIREBASE_ADMIN_ correspondiente al proyecto."
+            exit 1
+          fi
+          if [ -z "$RESPALDO_CLAVE" ]; then
+            echo "Falta configurar RESPALDO_CLAVE para cifrar los datos."
+            exit 1
+          fi
+          mkdir -p privado
+          trap 'rm -f privado/*.json' EXIT
+          node scripts/exportar-firestore-completo.mjs "privado/${PROJECT}.json"
+          printf '%s' "$RESPALDO_CLAVE" | gpg --batch --yes --no-tty --pinentry-mode loopback --passphrase-fd 0 --symmetric --cipher-algo AES256 --output "privado/${PROJECT}.json.gpg" "privado/${PROJECT}.json"
+          rm -f "privado/${PROJECT}.json"
+          echo "Respaldo completo cifrado. Solo se sube el archivo .gpg."
+
+      - name: Guardar copia cifrada (3 días)
+        uses: actions/upload-artifact@v4
+        with:
+          name: firestore-${{ inputs.proyecto }}-cifrado
+          path: privado/*.gpg
+          if-no-files-found: error
+          retention-days: 3
